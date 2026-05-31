@@ -1,0 +1,24 @@
+{
+  "name": "production-schedule-reflow",
+  "version": "1.0.0",
+  "description": "Production schedule reflow technical test",
+  "main": "index.js",
+  "scripts": {
+  "dev": "tsx src/index.ts",
+  "test": "vitest run",
+  "test:watch": "vitest",
+  "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}
