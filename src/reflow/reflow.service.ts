@@ -11,6 +11,7 @@ import type {
 import {
   calculateEndDateWithAvailability,
   diffInMinutes,
+  moveToNextAvailableTime,
   parseUtcDate,
   toIsoUtc,
 } from "../utils/date-utils";
@@ -116,8 +117,20 @@ export class ReflowService {
       const totalDurationMinutes =
         workOrder.data.durationMinutes + (workOrder.data.setupTimeMinutes ?? 0);
 
+      /**
+       * The earliestStartDate may still be outside a shift or inside maintenance.
+       * Move it to the next actual available working time before saving it.
+       */
+      const actualStartDate = toIsoUtc(
+        moveToNextAvailableTime(
+          parseUtcDate(earliestStartDate),
+          workCenter.data.shifts,
+          maintenanceWindows
+        )
+      );
+
       const newEndDate = calculateEndDateWithAvailability({
-        startDate: earliestStartDate,
+        startDate: actualStartDate,
         durationMinutes: totalDurationMinutes,
         shifts: workCenter.data.shifts,
         maintenanceWindows,
@@ -127,7 +140,7 @@ export class ReflowService {
         ...workOrder,
         data: {
           ...workOrder.data,
-          startDate: earliestStartDate,
+          startDate: actualStartDate,
           endDate: newEndDate,
         },
       };
@@ -142,7 +155,7 @@ export class ReflowService {
       );
 
       if (
-        workOrder.data.startDate !== earliestStartDate ||
+        workOrder.data.startDate !== actualStartDate ||
         workOrder.data.endDate !== newEndDate
       ) {
         changes.push({
@@ -152,20 +165,20 @@ export class ReflowService {
           oldStartDate: workOrder.data.startDate,
           oldEndDate: workOrder.data.endDate,
 
-          newStartDate: earliestStartDate,
+          newStartDate: actualStartDate,
           newEndDate,
 
-          movedByMinutes: diffInMinutes(workOrder.data.startDate, earliestStartDate),
+          movedByMinutes: diffInMinutes(workOrder.data.startDate, actualStartDate),
           reason: this.buildChangeReason({
             workOrder,
             dependencyReadyDate,
             workCenterReadyDate,
-            earliestStartDate,
+            earliestStartDate: actualStartDate,
           }),
         });
 
         explanations.push(
-          `Work order ${workOrder.data.workOrderNumber} moved from ${workOrder.data.startDate} - ${workOrder.data.endDate} to ${earliestStartDate} - ${newEndDate}.`
+          `Work order ${workOrder.data.workOrderNumber} moved from ${workOrder.data.startDate} - ${workOrder.data.endDate} to ${actualStartDate} - ${newEndDate}.`
         );
       } else {
         explanations.push(

@@ -216,4 +216,184 @@ describe("ReflowService", () => {
     expect(result.changes).toHaveLength(1);
     expect(result.explanations).toContain("Constraint validation passed.");
   });
+
+  it("waits for all parent work orders before scheduling a child work order", () => {
+    const service = new ReflowService();
+
+    const input: ReflowInput = {
+      workCenters: [
+        {
+          docId: "WC-001",
+          docType: "workCenter",
+          data: {
+            name: "Extrusion Line 1",
+            shifts: [
+              { dayOfWeek: 1, startHour: 8, endHour: 17 },
+              { dayOfWeek: 2, startHour: 8, endHour: 17 },
+              { dayOfWeek: 3, startHour: 8, endHour: 17 },
+              { dayOfWeek: 4, startHour: 8, endHour: 17 },
+              { dayOfWeek: 5, startHour: 8, endHour: 17 },
+            ],
+            maintenanceWindows: [],
+          },
+        },
+        {
+          docId: "WC-002",
+          docType: "workCenter",
+          data: {
+            name: "Extrusion Line 2",
+            shifts: [
+              { dayOfWeek: 1, startHour: 8, endHour: 17 },
+              { dayOfWeek: 2, startHour: 8, endHour: 17 },
+              { dayOfWeek: 3, startHour: 8, endHour: 17 },
+              { dayOfWeek: 4, startHour: 8, endHour: 17 },
+              { dayOfWeek: 5, startHour: 8, endHour: 17 },
+            ],
+            maintenanceWindows: [],
+          },
+        },
+      ],
+      manufacturingOrders: [],
+      workOrders: [
+        {
+          docId: "WO-PARENT-1",
+          docType: "workOrder",
+          data: {
+            workOrderNumber: "WO-PARENT-1",
+            manufacturingOrderId: "MO-006",
+            workCenterId: "WC-001",
+            startDate: "2026-06-01T08:00:00Z",
+            endDate: "2026-06-01T10:00:00Z",
+            durationMinutes: 120,
+            isMaintenance: false,
+            dependsOnWorkOrderIds: [],
+          },
+        },
+        {
+          docId: "WO-PARENT-2",
+          docType: "workOrder",
+          data: {
+            workOrderNumber: "WO-PARENT-2",
+            manufacturingOrderId: "MO-006",
+            workCenterId: "WC-002",
+            startDate: "2026-06-01T08:00:00Z",
+            endDate: "2026-06-01T13:00:00Z",
+            durationMinutes: 300,
+            isMaintenance: false,
+            dependsOnWorkOrderIds: [],
+          },
+        },
+        {
+          docId: "WO-CHILD",
+          docType: "workOrder",
+          data: {
+            workOrderNumber: "WO-CHILD",
+            manufacturingOrderId: "MO-006",
+            workCenterId: "WC-001",
+
+            /**
+             * This child is originally planned before WO-PARENT-2 finishes.
+             * It must wait for both parents, so it can only start at 13:00.
+             */
+            startDate: "2026-06-01T10:00:00Z",
+            endDate: "2026-06-01T11:00:00Z",
+            durationMinutes: 60,
+            isMaintenance: false,
+            dependsOnWorkOrderIds: ["WO-PARENT-1", "WO-PARENT-2"],
+          },
+        },
+      ],
+    };
+
+    const result = service.reflow(input);
+
+    const child = result.updatedWorkOrders.find(
+      (workOrder) => workOrder.docId === "WO-CHILD"
+    );
+
+    expect(child?.data.startDate).toBe("2026-06-01T13:00:00Z");
+    expect(child?.data.endDate).toBe("2026-06-01T14:00:00Z");
+    expect(result.explanations).toContain("Constraint validation passed.");
+  });
+
+  it("does not reschedule maintenance work orders and schedules normal work around them", () => {
+    const service = new ReflowService();
+
+    const input: ReflowInput = {
+      workCenters: [
+        {
+          docId: "WC-001",
+          docType: "workCenter",
+          data: {
+            name: "Extrusion Line 1",
+            shifts: [
+              { dayOfWeek: 1, startHour: 8, endHour: 17 },
+              { dayOfWeek: 2, startHour: 8, endHour: 17 },
+              { dayOfWeek: 3, startHour: 8, endHour: 17 },
+              { dayOfWeek: 4, startHour: 8, endHour: 17 },
+              { dayOfWeek: 5, startHour: 8, endHour: 17 },
+            ],
+            maintenanceWindows: [],
+          },
+        },
+      ],
+      manufacturingOrders: [],
+      workOrders: [
+        {
+          docId: "WO-MAINT",
+          docType: "workOrder",
+          data: {
+            workOrderNumber: "WO-MAINT",
+            manufacturingOrderId: "MO-MAINT",
+            workCenterId: "WC-001",
+            startDate: "2026-06-01T10:00:00Z",
+            endDate: "2026-06-01T12:00:00Z",
+            durationMinutes: 120,
+            isMaintenance: true,
+            dependsOnWorkOrderIds: [],
+          },
+        },
+        {
+          docId: "WO-NORMAL",
+          docType: "workOrder",
+          data: {
+            workOrderNumber: "WO-NORMAL",
+            manufacturingOrderId: "MO-007",
+            workCenterId: "WC-001",
+
+            /**
+             * This work order conflicts with the fixed maintenance work order.
+             * It should be scheduled after maintenance ends.
+             */
+            startDate: "2026-06-01T10:00:00Z",
+            endDate: "2026-06-01T11:00:00Z",
+            durationMinutes: 60,
+            isMaintenance: false,
+            dependsOnWorkOrderIds: [],
+          },
+        },
+      ],
+    };
+
+    const result = service.reflow(input);
+
+    const maintenance = result.updatedWorkOrders.find(
+      (workOrder) => workOrder.docId === "WO-MAINT"
+    );
+
+    const normal = result.updatedWorkOrders.find(
+      (workOrder) => workOrder.docId === "WO-NORMAL"
+    );
+
+    expect(maintenance?.data.startDate).toBe("2026-06-01T10:00:00Z");
+    expect(maintenance?.data.endDate).toBe("2026-06-01T12:00:00Z");
+
+    expect(normal?.data.startDate).toBe("2026-06-01T12:00:00Z");
+    expect(normal?.data.endDate).toBe("2026-06-01T13:00:00Z");
+
+    expect(result.explanations).toContain(
+      "Work order WO-MAINT was not moved because it is a maintenance work order."
+    );
+    expect(result.explanations).toContain("Constraint validation passed.");
+  });
 });
