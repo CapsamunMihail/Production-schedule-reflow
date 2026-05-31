@@ -1,106 +1,74 @@
+import { delayCascadeScenario } from "./data/scenario-delay-cascade";
+import { maintenanceScenario } from "./data/scenario-maintenance";
+import { shiftBoundaryScenario } from "./data/scenario-shift-boundary";
 import { ReflowService } from "./reflow/reflow.service";
-import type { ReflowInput } from "./reflow/types";
+import type { ReflowInput, ReflowResult } from "./reflow/types";
 
-const input: ReflowInput = {
-  workCenters: [
-    {
-      docId: "WC-001",
-      docType: "workCenter",
-      data: {
-        name: "Extrusion Line 1",
-        shifts: [
-          { dayOfWeek: 1, startHour: 8, endHour: 17 },
-          { dayOfWeek: 2, startHour: 8, endHour: 17 },
-          { dayOfWeek: 3, startHour: 8, endHour: 17 },
-          { dayOfWeek: 4, startHour: 8, endHour: 17 },
-          { dayOfWeek: 5, startHour: 8, endHour: 17 },
-        ],
-        maintenanceWindows: [],
-      },
-    },
-  ],
-  manufacturingOrders: [
-    {
-      docId: "MO-001",
-      docType: "manufacturingOrder",
-      data: {
-        manufacturingOrderNumber: "MO-001",
-        itemId: "PIPE-100",
-        quantity: 1000,
-        dueDate: "2026-06-05T17:00:00Z",
-      },
-    },
-  ],
-  workOrders: [
-    {
-      docId: "WO-001",
-      docType: "workOrder",
-      data: {
-        workOrderNumber: "WO-001",
-        manufacturingOrderId: "MO-001",
-        workCenterId: "WC-001",
-        startDate: "2026-06-01T08:00:00Z",
-        endDate: "2026-06-01T10:00:00Z",
-
-        /**
-         * Disruption:
-         * originally this order ended at 10:00,
-         * but now duration is 240 minutes.
-         */
-        durationMinutes: 240,
-
-        isMaintenance: false,
-        dependsOnWorkOrderIds: [],
-      },
-    },
-    {
-      docId: "WO-002",
-      docType: "workOrder",
-      data: {
-        workOrderNumber: "WO-002",
-        manufacturingOrderId: "MO-001",
-        workCenterId: "WC-001",
-        startDate: "2026-06-01T10:00:00Z",
-        endDate: "2026-06-01T12:00:00Z",
-        durationMinutes: 120,
-        isMaintenance: false,
-        dependsOnWorkOrderIds: ["WO-001"],
-      },
-    },
-    {
-      docId: "WO-003",
-      docType: "workOrder",
-      data: {
-        workOrderNumber: "WO-003",
-        manufacturingOrderId: "MO-001",
-        workCenterId: "WC-001",
-        startDate: "2026-06-01T12:00:00Z",
-        endDate: "2026-06-01T14:00:00Z",
-        durationMinutes: 120,
-        isMaintenance: false,
-        dependsOnWorkOrderIds: ["WO-002"],
-      },
-    },
-  ],
-};
-
-const reflowService = new ReflowService();
-const result = reflowService.reflow(input);
-
-console.log("Production Schedule Reflow Result");
-console.log("---------------------------------");
-
-console.log("\nUpdated Work Orders:");
-for (const workOrder of result.updatedWorkOrders) {
-  console.log(
-    `${workOrder.data.workOrderNumber}: ${workOrder.data.startDate} -> ${workOrder.data.endDate}`
-  );
+interface Scenario {
+  name: string;
+  description: string;
+  input: ReflowInput;
 }
 
-console.log("\nChanges:");
-console.log(JSON.stringify(result.changes, null, 2));
+const scenarios: Scenario[] = [
+  {
+    name: "Delay Cascade",
+    description:
+      "One delayed work order causes downstream dependent work orders to move.",
+    input: delayCascadeScenario,
+  },
+  {
+    name: "Shift Boundary",
+    description:
+      "A work order starts near the end of a shift and continues on the next working day.",
+    input: shiftBoundaryScenario,
+  },
+  {
+    name: "Maintenance Conflict",
+    description:
+      "A work order overlaps a maintenance window and must pause until maintenance ends.",
+    input: maintenanceScenario,
+  },
+];
 
-console.log("\nExplanations:");
-for (const explanation of result.explanations) {
-  console.log(`- ${explanation}`);
+const reflowService = new ReflowService();
+
+for (const scenario of scenarios) {
+  const result = reflowService.reflow(scenario.input);
+  printScenarioResult(scenario.name, scenario.description, result);
+}
+
+function printScenarioResult(
+  name: string,
+  description: string,
+  result: ReflowResult
+): void {
+  console.log("\n==================================================");
+  console.log(`Scenario: ${name}`);
+  console.log("==================================================");
+  console.log(description);
+
+  console.log("\nUpdated Work Orders:");
+  for (const workOrder of result.updatedWorkOrders) {
+    console.log(
+      `- ${workOrder.data.workOrderNumber}: ${workOrder.data.startDate} -> ${workOrder.data.endDate}`
+    );
+  }
+
+  console.log("\nChanges:");
+  if (result.changes.length === 0) {
+    console.log("- No changes.");
+  } else {
+    for (const change of result.changes) {
+      console.log(
+        `- ${change.workOrderNumber}: ${change.oldStartDate} -> ${change.oldEndDate} moved to ${change.newStartDate} -> ${change.newEndDate}`
+      );
+      console.log(`  Reason: ${change.reason}`);
+    }
+  }
+
+  console.log("\nExplanations:");
+  for (const explanation of result.explanations) {
+    console.log(`- ${explanation}`);
+  }
 }
