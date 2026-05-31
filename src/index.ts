@@ -1,4 +1,5 @@
 import { delayCascadeScenario } from "./data/scenario-delay-cascade";
+import { largeGeneratedScenario } from "./data/scenario-large-generated";
 import { maintenanceScenario } from "./data/scenario-maintenance";
 import { shiftBoundaryScenario } from "./data/scenario-shift-boundary";
 import { ReflowService } from "./reflow/reflow.service";
@@ -8,6 +9,7 @@ interface Scenario {
   name: string;
   description: string;
   input: ReflowInput;
+  outputMode?: "full" | "summary";
 }
 
 const scenarios: Scenario[] = [
@@ -16,18 +18,28 @@ const scenarios: Scenario[] = [
     description:
       "One delayed work order causes downstream dependent work orders to move.",
     input: delayCascadeScenario,
+    outputMode: "full",
   },
   {
     name: "Shift Boundary",
     description:
       "A work order starts near the end of a shift and continues on the next working day.",
     input: shiftBoundaryScenario,
+    outputMode: "full",
   },
   {
     name: "Maintenance Conflict",
     description:
       "A work order overlaps a maintenance window and must pause until maintenance ends.",
     input: maintenanceScenario,
+    outputMode: "full",
+  },
+  {
+    name: "Large Generated Dataset",
+    description:
+      "A larger ERP-like dataset with multiple work centers, manufacturing orders, dependencies, setup times, conflicts, and maintenance windows.",
+    input: largeGeneratedScenario,
+    outputMode: "summary",
   },
 ];
 
@@ -35,7 +47,12 @@ const reflowService = new ReflowService();
 
 for (const scenario of scenarios) {
   const result = reflowService.reflow(scenario.input);
-  printScenarioResult(scenario.name, scenario.description, result);
+
+  if (scenario.outputMode === "summary") {
+    printScenarioSummary(scenario.name, scenario.description, scenario.input, result);
+  } else {
+    printScenarioResult(scenario.name, scenario.description, result);
+  }
 }
 
 function printScenarioResult(
@@ -70,5 +87,47 @@ function printScenarioResult(
   console.log("\nExplanations:");
   for (const explanation of result.explanations) {
     console.log(`- ${explanation}`);
+  }
+}
+
+function printScenarioSummary(
+  name: string,
+  description: string,
+  input: ReflowInput,
+  result: ReflowResult
+): void {
+  console.log("\n==================================================");
+  console.log(`Scenario: ${name}`);
+  console.log("==================================================");
+  console.log(description);
+
+  const validationPassed = result.explanations.includes(
+    "Constraint validation passed."
+  );
+
+  console.log("\nSummary:");
+  console.log(`- Work centers: ${input.workCenters.length}`);
+  console.log(`- Manufacturing orders: ${input.manufacturingOrders?.length ?? 0}`);
+  console.log(`- Work orders: ${input.workOrders.length}`);
+  console.log(`- Changed work orders: ${result.changes.length}`);
+  console.log(`- Constraint validation: ${validationPassed ? "passed" : "failed"}`);
+
+  console.log("\nFirst 10 Updated Work Orders:");
+  for (const workOrder of result.updatedWorkOrders.slice(0, 10)) {
+    console.log(
+      `- ${workOrder.data.workOrderNumber}: ${workOrder.data.startDate} -> ${workOrder.data.endDate}`
+    );
+  }
+
+  console.log("\nFirst 10 Changes:");
+  for (const change of result.changes.slice(0, 10)) {
+    console.log(
+      `- ${change.workOrderNumber}: ${change.oldStartDate} -> ${change.oldEndDate} moved to ${change.newStartDate} -> ${change.newEndDate}`
+    );
+    console.log(`  Reason: ${change.reason}`);
+  }
+
+  if (result.changes.length > 10) {
+    console.log(`- ...and ${result.changes.length - 10} more changes`);
   }
 }
