@@ -1,3 +1,4 @@
+import { ConstraintChecker } from "./constraint-checker";
 import { DependencyGraph } from "./dependency-graph";
 import type {
   MaintenanceWindow,
@@ -185,6 +186,26 @@ export class ReflowService {
 
       return updated;
     });
+
+    const constraintChecker = new ConstraintChecker();
+
+    const validationResult = constraintChecker.validate({
+      originalInput: input,
+      updatedWorkOrders,
+      workCenters: input.workCenters,
+    });
+
+    if (!validationResult.valid) {
+      throw new Error(
+        `Generated schedule is invalid:\n${validationResult.errors.join("\n")}`
+      );
+    }
+
+    explanations.push("Constraint validation passed.");
+
+    for (const warning of validationResult.warnings) {
+      explanations.push(`Validation warning: ${warning}`);
+    }
 
     return {
       updatedWorkOrders,
