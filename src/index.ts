@@ -1,45 +1,56 @@
-import { calculateEndDateWithAvailability } from "./utils/date-utils";
-import type { MaintenanceWindow, WorkCenterShift } from "./reflow/types";
+import { DependencyGraph } from "./reflow/dependency-graph";
+import type { WorkOrderDocument } from "./reflow/types";
 
-const shifts: WorkCenterShift[] = [
-  { dayOfWeek: 1, startHour: 8, endHour: 17 },
-  { dayOfWeek: 2, startHour: 8, endHour: 17 },
-  { dayOfWeek: 3, startHour: 8, endHour: 17 },
-  { dayOfWeek: 4, startHour: 8, endHour: 17 },
-  { dayOfWeek: 5, startHour: 8, endHour: 17 },
-];
-
-const maintenanceWindows: MaintenanceWindow[] = [
+const workOrders: WorkOrderDocument[] = [
   {
-    startDate: "2026-06-01T12:00:00Z",
-    endDate: "2026-06-01T14:00:00Z",
-    reason: "Planned maintenance",
+    docId: "WO-003",
+    docType: "workOrder",
+    data: {
+      workOrderNumber: "WO-003",
+      manufacturingOrderId: "MO-001",
+      workCenterId: "WC-001",
+      startDate: "2026-06-01T12:00:00Z",
+      endDate: "2026-06-01T14:00:00Z",
+      durationMinutes: 120,
+      isMaintenance: false,
+      dependsOnWorkOrderIds: ["WO-002"],
+    },
+  },
+  {
+    docId: "WO-001",
+    docType: "workOrder",
+    data: {
+      workOrderNumber: "WO-001",
+      manufacturingOrderId: "MO-001",
+      workCenterId: "WC-001",
+      startDate: "2026-06-01T08:00:00Z",
+      endDate: "2026-06-01T10:00:00Z",
+      durationMinutes: 120,
+      isMaintenance: false,
+      dependsOnWorkOrderIds: [],
+    },
+  },
+  {
+    docId: "WO-002",
+    docType: "workOrder",
+    data: {
+      workOrderNumber: "WO-002",
+      manufacturingOrderId: "MO-001",
+      workCenterId: "WC-001",
+      startDate: "2026-06-01T10:00:00Z",
+      endDate: "2026-06-01T12:00:00Z",
+      durationMinutes: 120,
+      isMaintenance: false,
+      dependsOnWorkOrderIds: ["WO-001"],
+    },
   },
 ];
 
-const shiftBoundaryEnd = calculateEndDateWithAvailability({
-  startDate: "2026-06-01T16:00:00Z",
-  durationMinutes: 120,
-  shifts,
-  maintenanceWindows: [],
-});
+const graph = new DependencyGraph(workOrders);
+const result = graph.topologicalSort();
 
-const maintenanceEnd = calculateEndDateWithAvailability({
-  startDate: "2026-06-01T11:00:00Z",
-  durationMinutes: 240,
-  shifts,
-  maintenanceWindows,
-});
-
-console.log("Production Schedule Reflow System");
-console.log("---------------------------------");
-
-console.log("Shift boundary example:");
-console.log("Expected: 2026-06-02T09:00:00Z");
-console.log("Actual:  ", shiftBoundaryEnd);
-
-console.log("");
-
-console.log("Maintenance example:");
-console.log("Expected: 2026-06-01T17:00:00Z");
-console.log("Actual:  ", maintenanceEnd);
+console.log("Dependency graph example");
+console.log("------------------------");
+console.log(
+  result.orderedWorkOrders.map((workOrder) => workOrder.docId).join(" -> ")
+);
